@@ -354,11 +354,6 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         }
     }
 
-    @Override
-    protected BodyController createBodyControl() {
-        return new SmartBodyHelper2(this);
-    }
-
     static class Processor extends WalkNodeProcessor {
         private Processor() {
         }
@@ -425,7 +420,7 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         public void tick() {
             LivingEntity target = SquallGolemEntity.this.getTarget();
             if (SquallGolemEntity.this.attackTimer < 13 && target != null) {
-                SquallGolemEntity.this.getLookControl().setLookAt(target, 30.0F, 30.0F);
+                SquallGolemEntity.this.lookAt(target, 30.0F, 30.0F);
             } else {
                 SquallGolemEntity.this.yRot = SquallGolemEntity.this.yRotO;
 
