@@ -159,9 +159,39 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         super.tick();
 
         yRot = yBodyRot;
-
+        if(this.attackID == STOMP_ATTACK) {
+            if (this.attackTimer == 30) {
+                Attackparticle(2.75f,0f);
+            }
+        }
     }
 
+    private void Attackparticle(float vec, float math) {
+        if (this.level.isClientSide) {
+            for (int i1 = 0; i1 < 80 + random.nextInt(12); i1++) {
+                double DeltaMovementX = getRandom().nextGaussian() * 0.07D;
+                double DeltaMovementY = getRandom().nextGaussian() * 0.07D;
+                double DeltaMovementZ = getRandom().nextGaussian() * 0.07D;
+                float angle = (0.01745329251F * this.yBodyRot) + i1;
+                float f = MathHelper.cos(this.yRot * ((float)Math.PI / 180F)) ;
+                float f1 = MathHelper.sin(this.yRot * ((float)Math.PI / 180F)) ;
+                double extraX = 0.8 * MathHelper.sin((float) (Math.PI + angle));
+                double extraY = 0.3F;
+                double extraZ = 0.8 * MathHelper.cos(angle);
+                double theta = (yBodyRot) * (Math.PI / 180);
+                theta += Math.PI / 2;
+                double vecX = Math.cos(theta);
+                double vecZ = Math.sin(theta);
+                int hitX = MathHelper.floor(getX() + vec * vecX+ extraX);
+                int hitY = MathHelper.floor(getY());
+                int hitZ = MathHelper.floor(getZ() + vec * vecZ + extraZ);
+                BlockPos hit = new BlockPos(hitX, hitY, hitZ);
+                BlockState block = level.getBlockState(hit.below());
+                this.level.addParticle(new BlockParticleData(ParticleTypes.BLOCK, block), getX() + vec * vecX + extraX + f * math, this.getY() + extraY, getZ() + vec * vecZ + extraZ + f1 * math, DeltaMovementX, DeltaMovementY, DeltaMovementZ);
+
+            }
+        }
+    }
 
 
     private void handleSteppingOnBlocks() {
