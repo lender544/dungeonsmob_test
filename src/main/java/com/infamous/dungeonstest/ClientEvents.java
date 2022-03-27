@@ -1,9 +1,11 @@
 package com.infamous.dungeonstest;
 
 
+import com.infamous.dungeonstest.client.Renderer.SquallGolemRenderer;
 import com.infamous.dungeonstest.client.Renderer.TornadoProjectileRenderer;
 import com.infamous.dungeonstest.client.Renderer.WindcallerRenderer;
 import com.infamous.dungeonstest.server.ModEntityTypes;
+import com.infamous.dungeonstest.server.entities.SquallGolemEntity;
 import com.infamous.dungeonstest.server.entities.TornadoProjetileEntity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -25,6 +27,9 @@ public class ClientEvents {
 
         RenderingRegistry.registerEntityRenderingHandler(ModEntityTypes.TORNADOPROJETILE.get(),
                 manager -> new TornadoProjectileRenderer(manager));
+
+        RenderingRegistry.registerEntityRenderingHandler(ModEntityTypes.SQUALL_GOLEM.get(),
+                manager -> new SquallGolemRenderer(manager));
     }
 
 
