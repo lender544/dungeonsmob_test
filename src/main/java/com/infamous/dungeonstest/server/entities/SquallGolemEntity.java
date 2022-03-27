@@ -10,6 +10,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.ai.attributes.AttributeModifierMap;
 import net.minecraft.entity.ai.attributes.Attributes;
+import net.minecraft.entity.ai.controller.BodyController;
 import net.minecraft.entity.ai.goal.*;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.merchant.villager.AbstractVillagerEntity;
@@ -161,23 +162,24 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         yRot = yBodyRot;
         if(this.attackID == STOMP_ATTACK) {
             if (this.attackTimer == 30) {
-                Attackparticle(2.75f,0f);
+                Attackparticle(2.6f,0.5f);
+                Attackparticle(2.4f,-1f);
             }
         }
     }
 
     private void Attackparticle(float vec, float math) {
         if (this.level.isClientSide) {
-            for (int i1 = 0; i1 < 80 + random.nextInt(12); i1++) {
+            for (int i1 = 0; i1 < 60; i1++) {
                 double DeltaMovementX = getRandom().nextGaussian() * 0.07D;
                 double DeltaMovementY = getRandom().nextGaussian() * 0.07D;
                 double DeltaMovementZ = getRandom().nextGaussian() * 0.07D;
                 float angle = (0.01745329251F * this.yBodyRot) + i1;
                 float f = MathHelper.cos(this.yRot * ((float)Math.PI / 180F)) ;
                 float f1 = MathHelper.sin(this.yRot * ((float)Math.PI / 180F)) ;
-                double extraX = 0.8 * MathHelper.sin((float) (Math.PI + angle));
+                double extraX = 0.5 * MathHelper.sin((float) (Math.PI + angle));
                 double extraY = 0.3F;
-                double extraZ = 0.8 * MathHelper.cos(angle);
+                double extraZ = 0.5 * MathHelper.cos(angle);
                 double theta = (yBodyRot) * (Math.PI / 180);
                 theta += Math.PI / 2;
                 double vecX = Math.cos(theta);
@@ -350,6 +352,11 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
             this.nodeEvaluator = new Processor();
             return new PathFinder(this.nodeEvaluator, p_179679_1_);
         }
+    }
+
+    @Override
+    protected BodyController createBodyControl() {
+        return new SmartBodyHelper2(this);
     }
 
     static class Processor extends WalkNodeProcessor {
