@@ -10,11 +10,11 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.ai.attributes.AttributeModifierMap;
 import net.minecraft.entity.ai.attributes.Attributes;
-import net.minecraft.entity.ai.controller.BodyController;
 import net.minecraft.entity.ai.goal.*;
-import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.merchant.villager.AbstractVillagerEntity;
-import net.minecraft.entity.monster.*;
+import net.minecraft.entity.monster.AbstractRaiderEntity;
+import net.minecraft.entity.monster.MonsterEntity;
+import net.minecraft.entity.monster.RavagerEntity;
 import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.fluid.Fluids;
@@ -39,8 +39,6 @@ import net.minecraft.world.World;
 import net.minecraft.world.spawner.WorldEntitySpawner;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.common.ForgeHooks;
-import net.minecraftforge.event.entity.living.LivingKnockBackEvent;
 import software.bernie.geckolib3.core.IAnimatable;
 import software.bernie.geckolib3.core.PlayState;
 import software.bernie.geckolib3.core.builder.AnimationBuilder;
@@ -51,14 +49,15 @@ import software.bernie.geckolib3.core.manager.AnimationFactory;
 
 import javax.annotation.Nullable;
 import java.util.EnumSet;
-import java.util.List;
 
 public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatable {
     private int attackTimer;
     private int attackID;
     public static final byte STOMP_ATTACK = 1;
-    public static final DataParameter<Boolean> ACTIVATE = EntityDataManager.defineId(SquallGolemEntity.class, DataSerializers.BOOLEAN);
-    private static final DataParameter<Integer> DATA_ID_INV = EntityDataManager.defineId(SquallGolemEntity.class, DataSerializers.INT);
+    public static final byte GOLEM_ACTIVATE = 2;
+    public static final byte GOLEM_DEACTIVATE = 3;
+    private int timeWithoutTarget;
+    private static final DataParameter<Boolean> ACTIVATE = EntityDataManager.defineId(SquallGolemEntity.class, DataSerializers.BOOLEAN);
     private static final DataParameter<Boolean> MELEEATTACKING = EntityDataManager.defineId(SquallGolemEntity.class, DataSerializers.BOOLEAN);
 
     public SquallGolemEntity(EntityType entity, World world) {
@@ -75,12 +74,27 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
     }
 
     private <P extends IAnimatable> PlayState predicate(AnimationEvent<P> event) {
-        if (this.isMeleeAttacking()) {
+
+        if (this.attackID == GOLEM_ACTIVATE) {
+            event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.activate", false));
+            return PlayState.CONTINUE;
+
+        } else if (this.attackID == GOLEM_DEACTIVATE) {
+            event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.deactivate", false));
+            return PlayState.CONTINUE;
+
+        } else if (!this.getActivate()) {
+            event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.deactivated", true));
+            return PlayState.CONTINUE;
+
+        }else if (this.isMeleeAttacking()&& this.isAlive()) {
             event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.attack", false));
             return PlayState.CONTINUE;
+        
         } else if (!(event.getLimbSwingAmount() > -0.15F && event.getLimbSwingAmount() < 0.15F)) {
             event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.walk", true));
             return PlayState.CONTINUE;
+
         } else {
             event.getController().setAnimation(new AnimationBuilder().addAnimation("animation.squall_golem.idle", true));
             return PlayState.CONTINUE;
@@ -94,8 +108,11 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
 
     protected void registerGoals() {
         super.registerGoals();
-        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0D, false));
+        this.goalSelector.addGoal(4, new SquallGolemEntity.AttackGoal());
         this.goalSelector.addGoal(0, new SquallGolemEntity.MeleeGoal());
+        this.goalSelector.addGoal(1, new SquallGolemEntity.DoNothingGoal());
+        this.goalSelector.addGoal(0, new SquallGolemEntity.Deactivate());
+        this.goalSelector.addGoal(0, new SquallGolemEntity.Activate());
         this.goalSelector.addGoal(5, new WaterAvoidingRandomWalkingGoal(this, 0.6D));
         this.goalSelector.addGoal(6, new LookAtGoal(this, PlayerEntity.class, 6.0F));
         this.goalSelector.addGoal(7, new LookRandomlyGoal(this));
@@ -109,7 +126,7 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
-        this.entityData.define(ACTIVATE, true);
+        this.entityData.define(ACTIVATE, false);
         this.entityData.define(MELEEATTACKING, false);
     }
 
@@ -123,20 +140,12 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         setActivate(compound.getBoolean("activate"));
     }
 
-    public void setActivate(boolean isAwaken) {
-        this.entityData.set(ACTIVATE, isAwaken);
+    public void setActivate(boolean isActivate) {
+        this.entityData.set(ACTIVATE, isActivate);
     }
 
     public boolean getActivate() {
         return this.entityData.get(ACTIVATE);
-    }
-
-    public int getInvulnerableTicks() {
-        return this.entityData.get(DATA_ID_INV);
-    }
-
-    public void setInvulnerableTicks(int p_82215_1_) {
-        this.entityData.set(DATA_ID_INV, p_82215_1_);
     }
 
     public boolean isMeleeAttacking() {
@@ -159,27 +168,45 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
     public void tick() {
         super.tick();
 
-        yRot = yBodyRot;
         if(this.attackID == STOMP_ATTACK) {
             if (this.attackTimer == 30) {
-                Attackparticle(2.6f,0.5f);
-                Attackparticle(2.4f,-1f);
+                Attackparticle(40,0.5f,2.6f,0.5f);
+                Attackparticle(40,0.5f,2.4f,-1f);
             }
         }
+        LivingEntity target = this.getTarget();
+        if (!level.isClientSide) {
+            timeWithoutTarget++;
+            if (target != null) {
+                timeWithoutTarget = 0;
+                if(!this.getActivate()) {
+                    this.setActivate(true);
+                    this.attackID = GOLEM_ACTIVATE;
+                }
+            }
+
+            if (timeWithoutTarget > 200 && this.getActivate() && target == null) {
+                timeWithoutTarget = 0;
+                this.setActivate(false);
+                this.attackID = GOLEM_DEACTIVATE;
+
+            }
+        }
+
     }
 
-    private void Attackparticle(float vec, float math) {
+    private void Attackparticle(int paticle,float circle, float vec, float math) {
         if (this.level.isClientSide) {
-            for (int i1 = 0; i1 < 60; i1++) {
+            for (int i1 = 0; i1 < paticle; i1++) {
                 double DeltaMovementX = getRandom().nextGaussian() * 0.07D;
                 double DeltaMovementY = getRandom().nextGaussian() * 0.07D;
                 double DeltaMovementZ = getRandom().nextGaussian() * 0.07D;
                 float angle = (0.01745329251F * this.yBodyRot) + i1;
                 float f = MathHelper.cos(this.yRot * ((float)Math.PI / 180F)) ;
                 float f1 = MathHelper.sin(this.yRot * ((float)Math.PI / 180F)) ;
-                double extraX = 0.5 * MathHelper.sin((float) (Math.PI + angle));
+                double extraX = circle * MathHelper.sin((float) (Math.PI + angle));
                 double extraY = 0.3F;
-                double extraZ = 0.5 * MathHelper.cos(angle);
+                double extraZ = circle * MathHelper.cos(angle);
                 double theta = (yBodyRot) * (Math.PI / 180);
                 theta += Math.PI / 2;
                 double vecX = Math.cos(theta);
@@ -246,6 +273,8 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         return air;
     }
 
+
+
     public boolean doHurtTarget(Entity entityIn) {
         if (!this.level.isClientSide && this.attackID == 0) {
             this.attackID = STOMP_ATTACK;
@@ -256,12 +285,13 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
     /**
      * Called when the entity is attacked.
      */
+    @Override
     public boolean hurt(DamageSource source, float amount) {
-        boolean flag = super.hurt(source, amount);
-        if (flag) {
-            this.playSound(SoundEvents.IRON_GOLEM_DAMAGE, 1.0F, 1.0F);
+        if (!this.getActivate() && !source.isBypassInvul()) {
+            this.playSound(SoundEvents.IRON_GOLEM_HURT, 1.0F, 0.4F);
+            return false;
         }
-
+        boolean flag = super.hurt(source, amount);
         return flag;
     }
 
@@ -378,21 +408,93 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
         return false;
     }
 
+    class AttackGoal extends MeleeAttackGoal {
+        public AttackGoal() {
+            super(SquallGolemEntity.this, 1.0D, false);
+        }
+
+        protected double getAttackReachSqr(LivingEntity p_179512_1_) {
+            float f = SquallGolemEntity.this.getBbWidth() - 0.1F;
+            return f * 1.8F * f * 1.8F + p_179512_1_.getBbWidth();
+        }
+    }
+
     class DoNothingGoal extends Goal {
         public DoNothingGoal() {
             this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.JUMP, Goal.Flag.LOOK));
         }
 
         public boolean canUse() {
-            return SquallGolemEntity.this.getInvulnerableTicks() > 0;
+            return !SquallGolemEntity.this.getActivate();
         }
 
         @Override
         public void tick() {
-            SquallGolemEntity.this.setDeltaMovement(0, 0, 0);
+            SquallGolemEntity.this.setDeltaMovement(0, SquallGolemEntity.this.getDeltaMovement().y, 0);
         }
     }
 
+    class Activate extends Goal {
+        public Activate() {
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.JUMP, Goal.Flag.LOOK));
+        }
+
+        public boolean canUse() {
+            return attackID == GOLEM_ACTIVATE;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            //animation tick
+            return attackTimer < 60;
+        }
+
+        @Override
+        public void start() {
+            setAttackID(GOLEM_ACTIVATE);
+        }
+
+        @Override
+        public void tick() {
+            SquallGolemEntity.this.setDeltaMovement(0, SquallGolemEntity.this.getDeltaMovement().y, 0);
+        }
+
+        @Override
+        public void stop() {
+            setAttackID(0);
+        }
+    }
+
+    class Deactivate extends Goal {
+        public Deactivate() {
+            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.JUMP, Goal.Flag.LOOK));
+        }
+
+        public boolean canUse() {
+            return attackID == GOLEM_DEACTIVATE;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            //animation tick
+            return attackTimer < 80;
+        }
+
+        @Override
+        public void start() {
+            setAttackID(GOLEM_DEACTIVATE);
+        }
+
+        @Override
+        public void tick() {
+            SquallGolemEntity.this.setDeltaMovement(0, SquallGolemEntity.this.getDeltaMovement().y, 0);
+        }
+
+        @Override
+        public void stop() {
+            setAttackID(0);
+        }
+    }
 
     class MeleeGoal extends Goal {
         public MeleeGoal() {
