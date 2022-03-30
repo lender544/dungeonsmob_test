@@ -172,6 +172,7 @@ public class SquallGolemEntity extends AbstractRaiderEntity implements IAnimatab
             if (this.attackTimer == 30) {
                 Attackparticle(40,0.5f,2.6f,0.5f);
                 Attackparticle(40,0.5f,2.4f,-1f);
+                this.playSound(SoundEvents.GENERIC_EXPLODE, 1.5f, 1F + this.getRandom().nextFloat() * 0.1F);
             }
         }
         LivingEntity target = this.getTarget();
